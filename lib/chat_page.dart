@@ -1,32 +1,44 @@
 import 'package:flutter/material.dart';
 
-
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 
+import 'Constants.dart';
 import 'MsgModel.dart';
+import 'messagesWidget.dart';
+import 'msg_widget/others_msg_widget.dart';
 
-class HomePage extends StatefulWidget {
+class ChatPage extends StatefulWidget {
   final String name;
-  const HomePage({Key? key, required this.name}) : super(key: key);
+  final String userId;
+
+  const ChatPage({Key? key, required this.name, required this.userId})
+      : super(key: key);
 
   @override
-  State<HomePage> createState() => _HomePageState();
+  State<ChatPage> createState() => _ChatPageState();
 }
 
-class _HomePageState extends State<HomePage> {
-  TextEditingController _textController = TextEditingController();
+class _ChatPageState extends State<ChatPage> {
+  final TextEditingController _textController = TextEditingController();
   IO.Socket? socket;
   List<MsgModel> listMsg = [];
+  final focusNode = FocusNode();
+
+  late final ValueChanged<MsgModel> onSwippedMsg;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text("Socket"),
+        title: Text(widget.name),
       ),
       body: Column(
         children: [
-          Expanded(child: Container()),
+          Expanded(
+              child: MessagesWidget(
+            focusNode: focusNode,
+            listMsg: listMsg,
+          )),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 20),
             child: Row(
@@ -34,6 +46,7 @@ class _HomePageState extends State<HomePage> {
                 Expanded(
                     child: TextFormField(
                   controller: _textController,
+                  focusNode: focusNode,
                   decoration: InputDecoration(
                     hintText: "Type here...",
                     border: const OutlineInputBorder(
@@ -44,7 +57,8 @@ class _HomePageState extends State<HomePage> {
                     ),
                     suffixIcon: IconButton(
                         onPressed: () {
-                          sendMsg(_textController.text, "Amitabh");
+                          sendMsg(_textController.text, widget.name);
+                          _textController.clear();
                         },
                         icon: const Icon(
                           Icons.send,
@@ -63,17 +77,24 @@ class _HomePageState extends State<HomePage> {
 
   void sendMsg(String msg, String senderName) {
     print("sendMsg($msg,$senderName)");
- socket!.emit('sendMsg', {
+    MsgModel msgModel =
+        MsgModel(msg: msg, type: Constants.OWN_MSG, sender: senderName);
+    listMsg.add(msgModel);
+    setState(() {
+      listMsg;
+    });
+    socket!.emit('sendMsg', {
       'type': "ownMsg",
       "msg": msg,
       "senderName": senderName,
+      "userId": widget.userId
     });
   }
 
   @override
   void initState() {
     // textController=textController
-     socket = IO.io('http://localhost:3000', <String, dynamic>{
+    socket = IO.io('http://localhost:3000', <String, dynamic>{
       "transports": ["websocket"],
       "autoConnect": false,
     });
@@ -81,9 +102,18 @@ class _HomePageState extends State<HomePage> {
     socket!.onConnect((_) {
       print('connect');
       socket!.emit('message', 'test');
+
+      socket!.on('sendMsgServer', (msg) {
+        print("sendMsgServer- $msg");
+        if (msg["userId"] != widget.userId) {
+          listMsg.add(MsgModel(
+              msg: msg["msg"], type: msg["type"], sender: msg["senderName"]));
+
+          setState(() {
+            listMsg;
+          });
+        }
+      });
     });
-    // socket.on('message', (data) => print(data));
-    // socket.onDisconnect((_) => print('disconnect'));
-    // socket.on('fromServer', (_) => print(_));
   }
 }
